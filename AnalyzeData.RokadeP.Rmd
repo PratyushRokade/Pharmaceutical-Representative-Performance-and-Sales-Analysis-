@@ -1,0 +1,186 @@
+---
+title: "Explore and Mine Data"
+author: "Pratyush Rokade"
+date: "04/16/2024"
+output: pdf_document
+---
+
+```{r importLibraries, echo=FALSE}
+pacman::p_load(RMySQL, ggplot2)
+```
+
+## Report
+
+```{r connectDatabase, echo=FALSE}
+db <- dbConnect(RMySQL::MySQL(),
+                dbname = "sql5699558",
+                host = "sql5.freemysqlhosting.net",
+                user = "sql5699558",
+                password = "Ip2dMxppa6")
+```
+
+## Analytical Query 1
+
+```{r query1, echo=FALSE}
+
+# Retrieve data on the top sales reps for each year
+analytical_query1 <- dbGetQuery(db, "
+SELECT name, year, total_sold
+FROM (
+    SELECT 
+        r1.year,
+        r1.name,
+        SUM(r1.total_sold) AS total_sold,
+        (
+            SELECT COUNT(DISTINCT r2.total_sold) + 1
+            FROM rep_facts AS r2
+            WHERE r2.year = r1.year AND r2.total_sold > SUM(r1.total_sold)
+        ) AS rank
+    FROM rep_facts AS r1
+    GROUP BY r1.year, r1.name
+) AS ranked_sales
+WHERE rank = 1
+ORDER BY year, total_sold DESC;
+")
+
+analytical_query1
+
+
+print(endt-startt)
+
+# Plotting the data
+ggplot(analytical_query1, aes(x = factor(year), y = total_sold, fill = name)) +
+  geom_bar(stat = "identity", position = "dodge", colour = "black") +
+  labs(title = "Top 5 Sales Reps with the most sales broken down by Year",
+       x = "Year",
+       y = "Total Amount Sold",
+       fill = "Name") +
+  scale_fill_manual(values = c("red", "blue", "green", "yellow", "orange")) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+From the above plot it is clearly visible the sales figures of the top 5 reps each year. Walison da Silva has made the highest sales in each of the three years, whereas Helmut Schwab has made the least sales across the three years.
+
+
+## Analytical Query 2
+
+```{r query2, echo=FALSE}
+# Retrieve quarterly sales data
+analytical_query2 <- dbGetQuery(db, "
+SELECT 
+    name,
+    year,
+    quarter,
+    SUM(total_amount_sold) as total_amount_sold
+FROM 
+    product_facts
+GROUP BY 
+    name,
+    year,
+    quarter
+ORDER BY 
+    name,
+    year,
+    quarter;
+")
+
+# Create a new column combining year and quarter for better visualization
+analytical_query2$time <- with(analytical_query2,
+                               paste(year, quarter, sep=" Q"))
+
+# Plotting the quarterly sales data
+ggplot(data = analytical_query2, aes(x = time, y = total_amount_sold,
+                                     color = name, group = name)) +
+  geom_line() + 
+  geom_point() + 
+  labs(title = "Quarterly Sales Data",
+       x = "Year - Quarter",
+       y = "Total Amount Sold",
+       caption = "Data: Company Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5))
+
+analytical_query2
+```
+Observing the above plot, Zalofen has had the highest sales made in all of the quarters from 2020 through 2022. Diaprogenix has made the lowest sales across all the quarters in the three years.
+
+
+## Analytical Query 3
+
+```{r query3, echo=FALSE}
+# Retrieve total units sold per product per country
+analytical_query3 <- dbGetQuery(db, "
+SELECT 
+    name,
+    country,
+    SUM(units_sold) AS total_units_sold
+FROM 
+    product_facts 
+GROUP BY 
+    name,
+    country;
+")
+
+# Plotting total units sold per country with separate lines for each product
+ggplot(analytical_query3, aes(x = country, y = total_units_sold,
+                              group = name, color = name)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Total Units Sold Per Country",
+       x = "Country",
+       y = "Total Units Sold",
+       color = "Product") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plotting total units sold per country with separate facets for each product
+ggplot(analytical_query3, aes(x = country, y = total_units_sold,
+                              group = name)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Total Units Sold Per Country",
+       x = "Country",
+       y = "Total Units Sold") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, hjust = 0.75)) +
+  facet_wrap(~name, scales = "free_y")
+```
+The first plot shows the comparison of the number of units being sold for all products across the three countries. The second plot shows individual line charts of total units sold for each product across the three countries.
+
+
+## Analytical Query 4
+
+```{r query4, echo=FALSE}
+# Retrieve average annual sales per sales rep over the years
+analytical_query4 <- dbGetQuery(db, "
+SELECT 
+    rep_id,
+    name,
+    year,
+    AVG(total_sold) AS average_annual_sales
+FROM 
+    rep_facts
+GROUP BY 
+    rep_id, 
+    year
+ORDER BY
+    name;
+")
+
+# Plotting average sales per sales reps over the years
+ggplot(data = analytical_query4, aes(x = year, y = average_annual_sales,
+                                     group = name, color = name)) +
+  geom_line() +  
+  geom_point() +  
+  labs(title = "Average Sales per Sales Reps over the Years",
+       x = "Year",
+       y = "Average Annual Sales",
+       color = "Sales Rep") +
+  scale_x_continuous(breaks = unique(analytical_query4$year)) +
+  theme(plot.title = element_text(hjust = 0.5))  
+
+```
+Walison da Silva has had the highest average sales across all the years, whereas Veronica Sixt has achieved the least average sales.
+
+```{r disconnectDatabase, echo=FALSE}
+dbDisconnect(db)
+```
